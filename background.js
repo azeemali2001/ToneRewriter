@@ -74,7 +74,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 });
 
-const GEMINI_API_KEY = "AIzaSyDkmsNroMaqXom1mkjVfMzNUnmH5M5rIT4";
+const GEMINI_API_KEY = "";
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'rewrite_request') {
