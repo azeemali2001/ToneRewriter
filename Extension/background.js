@@ -74,40 +74,31 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 });
 
-const GEMINI_API_KEY = "";
+
+const BACKEND_URL = 'https://tonerewriter-backend.onrender.com/rewrite';
+const APP_SECRET = 'some-long-random-string';
+
+
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === 'rewrite_request') {
         const { text, tone } = msg;
 
-        fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GEMINI_API_KEY}`, {
-            method: "POST",
+        fetch(BACKEND_URL, {
+            method: 'POST',
             headers: {
-                "Content-Type": "application/json"
+                'Content-Type': 'application/json',
+                'x-app-secret': APP_SECRET
             },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [
-                            {
-                                text: `Rewrite the following sentence in a ${tone} tone. 
-Keep it concise, replace the original text directly, and correct any grammar or punctuation errors — no explanations, examples, or extra sentences. 
-Return only the fully polished, rewritten sentence:\n\n"${text}"`
-                            }
-                        ]
-                    }
-                ]
-            })
+            body: JSON.stringify({ text, tone })
         })
-            .then(res => res.json())
+            .then(r => r.json())
             .then(data => {
-                const rewritten =
-                    data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-                    "Error: No response from Gemini";
-                sendResponse({ ok: true, rewritten });
+                if (data?.ok) sendResponse({ ok: true, rewritten: data.rewritten });
+                else sendResponse({ ok: false, error: data?.error || 'backend_error' });
             })
             .catch(err => {
-                console.error("Gemini API error:", err);
+                console.error('Backend call failed', err);
                 sendResponse({ ok: false, error: err.message });
             });
 
