@@ -79,29 +79,56 @@ const BACKEND_URL = 'https://tonerewriter-backend.onrender.com/rewrite';
 const APP_SECRET = 'some-long-random-string';
 
 
+// Keep track of active requests per tab
+const activeRequests = new Map();
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.type === 'rewrite_request') {
-        const { text, tone } = msg;
+  if (msg?.type !== 'rewrite_request') return;
 
-        fetch(BACKEND_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-app-secret': APP_SECRET
-            },
-            body: JSON.stringify({ text, tone })
-        })
-            .then(r => r.json())
-            .then(data => {
-                if (data?.ok) sendResponse({ ok: true, rewritten: data.rewritten });
-                else sendResponse({ ok: false, error: data?.error || 'backend_error' });
-            })
-            .catch(err => {
-                console.error('Backend call failed', err);
-                sendResponse({ ok: false, error: err.message });
-            });
+  const tabId = sender.tab?.id;
+  if (!tabId) return;
 
-        return true;
-    }
+  // Prevent multiple concurrent requests per tab
+  if (activeRequests.get(tabId)) {
+    sendResponse({
+      ok: false,
+      error: 'Another request is in progress. Please wait...'
+    });
+    return true;
+  }
+
+  activeRequests.set(tabId, true);
+
+  const { text, tone } = msg;
+
+  fetch(BACKEND_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-app-secret': APP_SECRET
+    },
+    body: JSON.stringify({ text, tone })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data?.ok) {
+        sendResponse({ ok: true, rewritten: data.rewritten });
+      } else if (data?.error === 'model_overloaded' || data?.error === 'quota_exceeded') {
+        sendResponse({
+          ok: false,
+          error: 'Model is currently overloaded. Please try again in a few seconds.'
+        });
+      } else {
+        sendResponse({ ok: false, error: data?.error || 'backend_error' });
+      }
+    })
+    .catch(err => {
+      console.error('Backend call failed', err);
+      sendResponse({ ok: false, error: 'Network error. Please try again.' });
+    })
+    .finally(() => {
+      activeRequests.set(tabId, false);
+    });
+
+  return true; // keep sendResponse async
 });
